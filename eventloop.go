@@ -16,14 +16,16 @@ type eventloop[T any] struct {
 	closed  bool
 	closeCh chan struct{}
 	handler func(T)
+	wc      int
 }
 
-func NewEventLoop[T any](handler func(T), channelSize int) Eventloop[T] {
+func NewEventLoop[T any](handler func(T), channelSize int, workerCount int) Eventloop[T] {
 	e := new(eventloop[T])
 	e.ch = make(chan T, channelSize)
 	e.closeCh = make(chan struct{})
 	e.closed = false
 	e.handler = handler
+	e.wc = workerCount
 	return e
 }
 
@@ -42,14 +44,19 @@ func (e *eventloop[T]) Send(event T) error {
 }
 
 func (e *eventloop[T]) Run() {
-	for {
-		select {
-		case event := <-e.ch:
-			e.handle(event)
-		case <-e.closeCh:
-			return
-		}
+	for range e.wc {
+		// workerCount 개수만큼 goroutine을 실행시키고 handle을 실행한다.
+		go func() {
+			select {
+			case event := <-e.ch:
+				e.handle(event)
+			case <-e.closeCh:
+				return
+			}
+		}()
 	}
+
+	<-e.closeCh
 }
 
 func (e *eventloop[T]) Close() {
