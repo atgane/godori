@@ -1,4 +1,4 @@
-package godori
+package event
 
 import (
 	"errors"
