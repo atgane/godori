@@ -29,6 +29,16 @@ type TcpServerConfig struct {
 	BufferSize       int
 }
 
+func NewTcpServerConfig() *TcpServerConfig {
+	c := &TcpServerConfig{
+		EventChannelSize: 4096,
+		EventWorkerCount: 1,
+		TableInitSize:    2048,
+		BufferSize:       4096,
+	}
+	return c
+}
+
 type SocketEvent struct {
 	SocketUuid string
 	CreateAt   int64
@@ -38,7 +48,7 @@ type SocketEvent struct {
 
 type SocketHandler interface {
 	OnOpen(e *SocketEvent)
-	OnRead(e *SocketEvent, b []byte)
+	OnRead(e *SocketEvent, b []byte) uint
 	OnClose(e *SocketEvent)
 	OnError(e *SocketEvent, err error) // while error caused at socket read
 }
@@ -123,9 +133,9 @@ func (s *TcpServer) handleSocket(e *SocketEvent) {
 
 func (s *TcpServer) onListen(e *SocketEvent) {
 	b := make([]byte, s.config.BufferSize)
+	buf := make([]byte, s.config.BufferSize*2)
 	for {
-		n, err := e.Conn.Read(b)
-		if err != nil {
+		if _, err := e.Conn.Read(b); err != nil {
 			s.socketHandler.OnError(e, err)
 
 			if s.closed {
@@ -141,6 +151,15 @@ func (s *TcpServer) onListen(e *SocketEvent) {
 			return
 		}
 
-		s.socketHandler.OnRead(e, b[:n])
+		buf = append(buf, b...)
+		p := uint(0)
+		n := uint(len(buf))
+		for p < n {
+			r := s.socketHandler.OnRead(e, buf[p:])
+			if r == 0 {
+				break
+			}
+			p += r
+		}
 	}
 }
