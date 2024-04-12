@@ -41,7 +41,6 @@ func (e *eventloop[T]) Send(event T) error {
 
 func (e *eventloop[T]) Run() {
 	for range e.wc {
-		// workerCount 개수만큼 goroutine을 실행시키고 handle을 실행한다.
 		go func() {
 			for {
 				select {

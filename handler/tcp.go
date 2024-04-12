@@ -161,5 +161,6 @@ func (s *TcpServer) onListen(e *SocketEvent) {
 			}
 			p += r
 		}
+		buf = buf[p:]
 	}
 }
