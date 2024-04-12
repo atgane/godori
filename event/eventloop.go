@@ -34,12 +34,8 @@ func (e *eventloop[T]) Send(event T) error {
 		return errors.New("eventloop already closed")
 	}
 
-	select {
-	case event := <-e.ch:
-		e.handle(event)
-	case <-e.closeCh:
-		return nil
-	}
+	e.ch <- event
+
 	return nil
 }
 
@@ -47,11 +43,13 @@ func (e *eventloop[T]) Run() {
 	for range e.wc {
 		// workerCount 개수만큼 goroutine을 실행시키고 handle을 실행한다.
 		go func() {
-			select {
-			case event := <-e.ch:
-				e.handle(event)
-			case <-e.closeCh:
-				return
+			for {
+				select {
+				case event := <-e.ch:
+					e.handle(event)
+				case <-e.closeCh:
+					return
+				}
 			}
 		}()
 	}
