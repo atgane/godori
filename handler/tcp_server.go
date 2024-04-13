@@ -9,13 +9,13 @@ import (
 	"github.com/google/uuid"
 )
 
-type TcpServer struct {
+type TcpServer[T any] struct {
 	socketTable *event.Table[net.Conn]
 
 	listener        net.Listener
 	config          TcpServerConfig
-	socketEventloop event.Eventloop[*SocketEvent]
-	socketHandler   SocketHandler
+	socketEventloop event.Eventloop[*SocketEvent[T]]
+	socketHandler   SocketHandler[T]
 
 	closeCh chan struct{}
 	closed  bool
@@ -39,18 +39,19 @@ func NewTcpServerConfig() *TcpServerConfig {
 	return c
 }
 
-type SocketEvent struct {
+type SocketEvent[T any] struct {
 	SocketUuid string
 	CreateAt   int64
 	Status     SocketStatus
 	Conn       net.Conn
+	Field      T
 }
 
-type SocketHandler interface {
-	OnOpen(e *SocketEvent)
-	OnRead(e *SocketEvent, b []byte) uint
-	OnClose(e *SocketEvent)
-	OnError(e *SocketEvent, err error) // while error caused at socket read
+type SocketHandler[T any] interface {
+	OnOpen(e *SocketEvent[T])
+	OnRead(e *SocketEvent[T], b []byte) uint
+	OnClose(e *SocketEvent[T])
+	OnError(e *SocketEvent[T], err error) // while error caused at socket read
 }
 
 type SocketStatus int
@@ -60,8 +61,8 @@ const (
 	SocketDisconnected
 )
 
-func NewTcpServer(h SocketHandler, c *TcpServerConfig) *TcpServer {
-	s := &TcpServer{}
+func NewTcpServer[T any](h SocketHandler[T], c *TcpServerConfig) *TcpServer[T] {
+	s := &TcpServer[T]{}
 	s.config = *c
 	s.socketEventloop = event.NewEventLoop(s.handleSocket, c.EventChannelSize, c.EventWorkerCount)
 	s.socketTable = event.NewTable[net.Conn](c.TableInitSize)
@@ -69,7 +70,7 @@ func NewTcpServer(h SocketHandler, c *TcpServerConfig) *TcpServer {
 	return s
 }
 
-func (s *TcpServer) Run() (err error) {
+func (s *TcpServer[T]) Run() (err error) {
 	s.listener, err = net.Listen("tcp", fmt.Sprintf(":%d", s.config.Port))
 	if err != nil {
 		return err
@@ -88,24 +89,24 @@ func (s *TcpServer) Run() (err error) {
 	return nil
 }
 
-func (s *TcpServer) Close() {
+func (s *TcpServer[T]) Close() {
 	s.closed = true
 	close(s.closeCh)
 	s.socketEventloop.Close()
 	s.listener.Close()
 }
 
-func (s *TcpServer) IsClosed() bool {
+func (s *TcpServer[T]) IsClosed() bool {
 	return s.closed
 }
 
-func (s *TcpServer) loopAccept() error {
+func (s *TcpServer[T]) loopAccept() error {
 	conn, err := s.listener.Accept()
 	if err != nil {
 		return err
 	}
 
-	e := &SocketEvent{
+	e := &SocketEvent[T]{
 		SocketUuid: uuid.New().String(),
 		CreateAt:   time.Now().Unix(),
 		Status:     SocketConnected,
@@ -119,7 +120,7 @@ func (s *TcpServer) loopAccept() error {
 	return nil
 }
 
-func (s *TcpServer) handleSocket(e *SocketEvent) {
+func (s *TcpServer[T]) handleSocket(e *SocketEvent[T]) {
 	switch e.Status {
 	case SocketConnected:
 		s.socketTable.Upsert(e.SocketUuid, e.Conn)
@@ -131,7 +132,7 @@ func (s *TcpServer) handleSocket(e *SocketEvent) {
 	}
 }
 
-func (s *TcpServer) onListen(e *SocketEvent) {
+func (s *TcpServer[T]) onListen(e *SocketEvent[T]) {
 	b := make([]byte, s.config.BufferSize)
 	buf := make([]byte, s.config.BufferSize*2)
 	for {
@@ -142,7 +143,7 @@ func (s *TcpServer) onListen(e *SocketEvent) {
 				return
 			}
 
-			s.socketEventloop.Send(&SocketEvent{
+			s.socketEventloop.Send(&SocketEvent[T]{
 				SocketUuid: e.SocketUuid,
 				CreateAt:   e.CreateAt,
 				Status:     SocketDisconnected,

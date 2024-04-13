@@ -8,12 +8,14 @@ import (
 
 type TcpHandler struct{}
 
-var _ handler.SocketHandler = (*TcpHandler)(nil)
+type SocketEventField struct{}
 
-func (t *TcpHandler) OnOpen(e *handler.SocketEvent)             {}
-func (t *TcpHandler) OnClose(e *handler.SocketEvent)            {}
-func (t *TcpHandler) OnError(e *handler.SocketEvent, err error) {}
-func (t *TcpHandler) OnRead(e *handler.SocketEvent, b []byte) uint {
+var _ handler.SocketHandler[SocketEventField] = (*TcpHandler)(nil)
+
+func (t *TcpHandler) OnOpen(e *handler.SocketEvent[SocketEventField])             {}
+func (t *TcpHandler) OnClose(e *handler.SocketEvent[SocketEventField])            {}
+func (t *TcpHandler) OnError(e *handler.SocketEvent[SocketEventField], err error) {}
+func (t *TcpHandler) OnRead(e *handler.SocketEvent[SocketEventField], b []byte) uint {
 	e.Conn.Write(b)
 	fmt.Print(string(b))
 	return uint(len(b))
