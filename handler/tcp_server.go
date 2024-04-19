@@ -10,7 +10,7 @@ import (
 )
 
 type TcpServer[T any] struct {
-	socketTable *event.Table[net.Conn]
+	socketTable *event.Table[string, net.Conn]
 
 	listener        net.Listener
 	config          TcpServerConfig
@@ -65,7 +65,7 @@ func NewTcpServer[T any](h SocketHandler[T], c *TcpServerConfig) *TcpServer[T] {
 	s := &TcpServer[T]{}
 	s.config = *c
 	s.socketEventloop = event.NewEventLoop(s.handleSocket, c.EventChannelSize, c.EventWorkerCount)
-	s.socketTable = event.NewTable[net.Conn](c.TableInitSize)
+	s.socketTable = event.NewTable[string, net.Conn](c.TableInitSize)
 	s.socketHandler = h
 	return s
 }

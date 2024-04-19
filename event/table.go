@@ -5,19 +5,19 @@ import (
 	"sync"
 )
 
-type Table[T any] struct {
-	table map[string]T
+type Table[F comparable, T any] struct {
+	table map[F]T
 	mu    sync.RWMutex
 }
 
-func NewTable[T any](initSize int) *Table[T] {
-	t := &Table[T]{}
-	t.table = make(map[string]T, initSize)
+func NewTable[F comparable, T any](initSize int) *Table[F, T] {
+	t := &Table[F, T]{}
+	t.table = make(map[F]T, initSize)
 
 	return t
 }
 
-func (t *Table[T]) Broadcast(handler func(T)) {
+func (t *Table[F, T]) Broadcast(handler func(T)) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
@@ -26,7 +26,7 @@ func (t *Table[T]) Broadcast(handler func(T)) {
 	}
 }
 
-func (t *Table[T]) BroadcastParallel(handler func(T), maxParallel int) {
+func (t *Table[F, T]) BroadcastParallel(handler func(T), maxParallel int) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
@@ -44,7 +44,7 @@ func (t *Table[T]) BroadcastParallel(handler func(T), maxParallel int) {
 	}
 }
 
-func (t *Table[T]) Unicast(key string, handler func(T)) error {
+func (t *Table[F, T]) Unicast(key F, handler func(T)) error {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
@@ -58,14 +58,14 @@ func (t *Table[T]) Unicast(key string, handler func(T)) error {
 	return nil
 }
 
-func (t *Table[T]) Upsert(key string, e T) {
+func (t *Table[F, T]) Upsert(key F, e T) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	t.table[key] = e
 }
 
-func (t *Table[T]) Delete(key string) {
+func (t *Table[F, T]) Delete(key F) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
