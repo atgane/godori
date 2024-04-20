@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/atgane/godori/event"
@@ -47,6 +48,7 @@ type SocketEvent[T any] struct {
 	Status     SocketStatus
 	Conn       net.Conn
 	Field      T
+	mu         sync.Mutex
 }
 
 type SocketHandler[T any] interface {
@@ -136,9 +138,10 @@ func (s *TcpServer[T]) handleSocket(e *SocketEvent[T]) {
 
 func (s *TcpServer[T]) onListen(e *SocketEvent[T]) {
 	b := make([]byte, s.config.BufferSize)
-	buf := make([]byte, s.config.BufferSize*2)
+	buf := make([]byte, 0, s.config.BufferSize*2)
 	for {
-		if _, err := e.Conn.Read(b); err != nil {
+		r, err := e.Conn.Read(b)
+		if err != nil {
 			s.socketHandler.OnError(e, err)
 
 			if s.closed {
@@ -154,7 +157,7 @@ func (s *TcpServer[T]) onListen(e *SocketEvent[T]) {
 			return
 		}
 
-		buf = append(buf, b...)
+		buf = append(buf, b[:r]...)
 		p := uint(0)
 		n := uint(len(buf))
 		for p < n {
@@ -166,4 +169,21 @@ func (s *TcpServer[T]) onListen(e *SocketEvent[T]) {
 		}
 		buf = buf[p:]
 	}
+}
+
+func (s *SocketEvent[T]) Write(w []byte) (n uint, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	m := uint(len(w))
+	for n < m {
+		d, err := s.Conn.Write(w[n:])
+		n += uint(d)
+		if err != nil {
+			return n, err
+		}
+		if d == 0 { // prevent inf loop
+			break
+		}
+	}
+	return n, nil
 }
