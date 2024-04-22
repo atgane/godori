@@ -44,7 +44,8 @@ func NewTcpServerConfig() *TcpServerConfig {
 
 type SocketEvent[T any] struct {
 	SocketUuid string
-	CreateAt   int64
+	CreateAt   time.Time
+	UpdateAt   time.Time
 	Status     SocketStatus
 	Conn       net.Conn
 	Field      T
@@ -112,7 +113,7 @@ func (s *TcpServer[T]) loopAccept() error {
 
 	e := &SocketEvent[T]{
 		SocketUuid: uuid.New().String(),
-		CreateAt:   time.Now().Unix(),
+		CreateAt:   time.Now(),
 		Status:     SocketConnected,
 		Conn:       conn,
 	}
@@ -157,6 +158,7 @@ func (s *TcpServer[T]) onListen(e *SocketEvent[T]) {
 			return
 		}
 
+		e.UpdateAt = time.Now()
 		buf = append(buf, b[:r]...)
 		p := uint(0)
 		n := uint(len(buf))

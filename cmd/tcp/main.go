@@ -1,6 +1,8 @@
 package main
 
-import "github.com/atgane/godori/handler"
+import (
+	"github.com/atgane/godori/handler"
+)
 
 func main() {
 	conf := handler.NewTcpServerConfig()
