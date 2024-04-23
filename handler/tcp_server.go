@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"net"
+	"runtime"
 	"sync"
 	"time"
 
@@ -40,6 +41,7 @@ func NewTcpServerConfig() *TcpServerConfig {
 		EventWorkerCount: 1,
 		TableInitSize:    2048,
 		BufferSize:       4096,
+		WriteRetryCount:  5,
 	}
 	return c
 }
@@ -184,15 +186,26 @@ func (s *SocketEvent[T]) Write(w []byte) (n uint, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	m := uint(len(w))
+	retry := 0
 	for n < m {
 		d, err := s.Conn.Write(w[n:])
 		n += uint(d)
 		if err != nil {
+			if opErr, ok := err.(*net.OpError); ok && opErr.Temporary() {
+				runtime.Gosched()
+				retry++
+				if retry >= s.WriteRetryCount {
+					return n, err
+				}
+				continue
+			}
 			return n, err
 		}
 		if d == 0 { // prevent inf loop
 			break
 		}
+
+		retry = 0
 	}
 	return n, nil
 }
