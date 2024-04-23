@@ -25,11 +25,13 @@ type TcpServer[T any] struct {
 var _ Handler = (*TcpServer[*struct{}])(nil)
 
 type TcpServerConfig struct {
-	EventChannelSize int
-	EventWorkerCount int
-	Port             int
-	TableInitSize    int
-	BufferSize       int
+	EventChannelSize   int
+	EventWorkerCount   int
+	Port               int
+	TableInitSize      int
+	BufferSize         int
+	ReadDeadlineSecond int
+	WriteRetryCount    int
 }
 
 func NewTcpServerConfig() *TcpServerConfig {
@@ -43,13 +45,14 @@ func NewTcpServerConfig() *TcpServerConfig {
 }
 
 type SocketEvent[T any] struct {
-	SocketUuid string
-	CreateAt   time.Time
-	UpdateAt   time.Time
-	Status     SocketStatus
-	Conn       net.Conn
-	Field      T
-	mu         sync.Mutex
+	SocketUuid      string
+	CreateAt        time.Time
+	UpdateAt        time.Time
+	WriteRetryCount int
+	Status          SocketStatus
+	Conn            net.Conn
+	Field           T
+	mu              sync.Mutex
 }
 
 type SocketHandler[T any] interface {
@@ -112,10 +115,12 @@ func (s *TcpServer[T]) loopAccept() error {
 	}
 
 	e := &SocketEvent[T]{
-		SocketUuid: uuid.New().String(),
-		CreateAt:   time.Now(),
-		Status:     SocketConnected,
-		Conn:       conn,
+		SocketUuid:      uuid.New().String(),
+		CreateAt:        time.Now(),
+		UpdateAt:        time.Now(),
+		WriteRetryCount: s.config.WriteRetryCount,
+		Status:          SocketConnected,
+		Conn:            conn,
 	}
 
 	if err := s.socketEventloop.Send(e); err != nil {
@@ -141,6 +146,7 @@ func (s *TcpServer[T]) onListen(e *SocketEvent[T]) {
 	b := make([]byte, s.config.BufferSize)
 	buf := make([]byte, 0, s.config.BufferSize*2)
 	for {
+		e.Conn.SetReadDeadline(time.Now().Add(time.Second * time.Duration(s.config.ReadDeadlineSecond)))
 		r, err := e.Conn.Read(b)
 		if err != nil {
 			s.socketHandler.OnError(e, err)
@@ -152,6 +158,7 @@ func (s *TcpServer[T]) onListen(e *SocketEvent[T]) {
 			s.socketEventloop.Send(&SocketEvent[T]{
 				SocketUuid: e.SocketUuid,
 				CreateAt:   e.CreateAt,
+				UpdateAt:   e.UpdateAt,
 				Status:     SocketDisconnected,
 				Conn:       e.Conn,
 			})
