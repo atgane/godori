@@ -46,7 +46,7 @@ func NewRunner[T any](h RunnerHandler[T], c *RunnerConfig) *Runner[T] {
 	r.closeCh = make(chan struct{})
 
 	eventHandler := func(e *RunnerEvent[T]) {
-		r.runnerHandler.OnCall(e)
+		RunWithRecover(func() { r.runnerHandler.OnCall(e) })
 	}
 
 	r.runnerEventloop = event.NewEventLoop(eventHandler, c.EventChannelSize, c.EventWorkerCount)
