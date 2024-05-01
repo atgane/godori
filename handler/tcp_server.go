@@ -5,6 +5,7 @@ import (
 	"net"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/atgane/godori/event"
@@ -20,7 +21,7 @@ type TcpServer[T any] struct {
 	socketHandler   SocketHandler[T]
 
 	closeCh chan struct{}
-	closed  bool
+	closed  atomic.Bool
 }
 
 var _ Handler = (*TcpServer[*struct{}])(nil)
@@ -100,14 +101,14 @@ func (s *TcpServer[T]) Run() (err error) {
 }
 
 func (s *TcpServer[T]) Close() {
-	s.closed = true
+	s.closed.Store(true)
 	close(s.closeCh)
 	s.socketEventloop.Close()
 	s.listener.Close()
 }
 
 func (s *TcpServer[T]) IsClosed() bool {
-	return s.closed
+	return s.closed.Load()
 }
 
 func (s *TcpServer[T]) loopAccept() error {
@@ -153,7 +154,7 @@ func (s *TcpServer[T]) onListen(e *SocketEvent[T]) {
 		if err != nil {
 			RunWithRecover(func() { s.socketHandler.OnError(e, err) })
 
-			if s.closed {
+			if s.closed.Load() {
 				return
 			}
 

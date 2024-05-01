@@ -35,6 +35,6 @@ func TestRunner(t *testing.T) {
 
 	// Close() check
 	runner.Close()
-	require.True(t, runner.closed)
+	require.True(t, runner.closed.Load())
 	require.True(t, runner.runnerEventloop.IsClosed())
 }

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/atgane/godori/event"
@@ -12,7 +13,7 @@ type Runner[T any] struct {
 	config          *RunnerConfig
 
 	closeCh chan struct{}
-	closed  bool
+	closed  atomic.Bool
 }
 
 var _ Handler = (*Runner[*struct{}])(nil)
@@ -68,7 +69,7 @@ func (r *Runner[T]) Send(event T) error {
 }
 
 func (r *Runner[T]) Close() {
-	r.closed = true
+	r.closed.Store(true)
 	close(r.closeCh)
 	r.runnerEventloop.Close()
 }
