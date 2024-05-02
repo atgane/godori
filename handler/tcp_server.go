@@ -78,6 +78,8 @@ func NewTcpServer[T any](h SocketHandler[T], c *TcpServerConfig) *TcpServer[T] {
 	s.socketEventloop = event.NewEventLoop(s.handleSocket, c.EventChannelSize, c.EventWorkerCount)
 	s.socketTable = event.NewTable[string, net.Conn](c.TableInitSize)
 	s.socketHandler = h
+	s.closeCh = make(chan struct{})
+	s.closed.Store(false)
 	return s
 }
 
@@ -101,6 +103,10 @@ func (s *TcpServer[T]) Run() (err error) {
 }
 
 func (s *TcpServer[T]) Close() {
+	if s.closed.Load() {
+		return
+	}
+
 	s.closed.Store(true)
 	close(s.closeCh)
 	s.socketEventloop.Close()

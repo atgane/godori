@@ -32,7 +32,7 @@ func NewRunnerConfig() *RunnerConfig {
 }
 
 type RunnerEvent[T any] struct {
-	CreateAt int64
+	CreateAt time.Time
 	Field    T
 }
 
@@ -45,6 +45,7 @@ func NewRunner[T any](h RunnerHandler[T], c *RunnerConfig) *Runner[T] {
 	r.config = c
 	r.runnerHandler = h
 	r.closeCh = make(chan struct{})
+	r.closed.Store(false)
 
 	eventHandler := func(e *RunnerEvent[T]) {
 		RunWithRecover(func() { r.runnerHandler.OnCall(e) })
@@ -62,13 +63,17 @@ func (r *Runner[T]) Run() (err error) {
 
 func (r *Runner[T]) Send(event T) error {
 	e := &RunnerEvent[T]{
-		CreateAt: time.Now().Unix(),
+		CreateAt: time.Now(),
 		Field:    event,
 	}
 	return r.runnerEventloop.Send(e)
 }
 
 func (r *Runner[T]) Close() {
+	if r.closed.Load() {
+		return
+	}
+
 	r.closed.Store(true)
 	close(r.closeCh)
 	r.runnerEventloop.Close()
