@@ -17,11 +17,12 @@ type SocketEventField struct{}
 
 var _ handler.SocketHandler[SocketEventField] = (*TcpHandler)(nil)
 
-func (t *TcpHandler) OnOpen(e *handler.SocketEvent[SocketEventField])             {}
-func (t *TcpHandler) OnClose(e *handler.SocketEvent[SocketEventField])            {}
-func (t *TcpHandler) OnError(e *handler.SocketEvent[SocketEventField], err error) {}
-func (t *TcpHandler) OnRead(e *handler.SocketEvent[SocketEventField], b []byte) uint {
-	e.Write(b)
+func (t *TcpHandler) OnOpen(uuid string, c *handler.Conn[SocketEventField])                  {}
+func (t *TcpHandler) OnClose(uuid string, c *handler.Conn[SocketEventField])                 {}
+func (t *TcpHandler) OnReadError(uuid string, c *handler.Conn[SocketEventField], err error)  {}
+func (t *TcpHandler) OnWriteError(uuid string, c *handler.Conn[SocketEventField], err error) {}
+func (t *TcpHandler) OnRead(uuid string, c *handler.Conn[SocketEventField], b []byte) uint {
+	c.Write(b)
 	t.nu += len(b)
 	fmt.Println(t.nu, len(b), string(b))
 	return uint(len(b))
