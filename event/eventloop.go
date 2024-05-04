@@ -2,6 +2,7 @@ package event
 
 import (
 	"errors"
+	"time"
 )
 
 type Eventloop[T any] interface {
@@ -12,19 +13,21 @@ type Eventloop[T any] interface {
 }
 
 type eventloop[T any] struct {
-	ch      chan T
-	closed  bool
-	closeCh chan struct{}
-	handler func(T)
-	wc      int
+	ch          chan T
+	closed      bool
+	closeCh     chan struct{}
+	handler     func(T)
+	sendTimeout time.Duration
+	wc          int
 }
 
-func NewEventLoop[T any](handler func(T), channelSize int, workerCount int) Eventloop[T] {
+func NewEventLoop[T any](handler func(T), channelSize int, workerCount int, sendTimeout time.Duration) Eventloop[T] {
 	e := new(eventloop[T])
 	e.ch = make(chan T, channelSize)
 	e.closeCh = make(chan struct{})
 	e.closed = false
 	e.handler = handler
+	e.sendTimeout = sendTimeout
 	e.wc = workerCount
 	return e
 }
@@ -34,9 +37,17 @@ func (e *eventloop[T]) Send(event T) error {
 		return errors.New("eventloop already closed")
 	}
 
-	e.ch <- event
+	if e.sendTimeout == 0 {
+		e.ch <- event
+		return nil
+	}
 
-	return nil
+	select {
+	case e.ch <- event:
+		return nil
+	case <-time.After(e.sendTimeout):
+		return errors.New("eventloop push timeout")
+	}
 }
 
 func (e *eventloop[T]) Run() {
