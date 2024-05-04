@@ -35,13 +35,17 @@ func (t *Table[F, T]) BroadcastParallel(handler func(T), maxParallel int) {
 	}
 
 	waitCh := make(chan struct{}, maxParallel)
+	wg := &sync.WaitGroup{}
 	for _, e := range t.table {
+		wg.Add(1)
 		waitCh <- struct{}{}
 		go func(e T) {
 			handler(e)
 			<-waitCh
+			wg.Done()
 		}(e)
 	}
+	wg.Wait()
 }
 
 func (t *Table[F, T]) Unicast(key F, handler func(T)) error {

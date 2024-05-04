@@ -35,13 +35,17 @@ func (li *List[T]) BroadcastParallel(handler func(T), maxParallel int) {
 	}
 
 	waitCh := make(chan struct{}, maxParallel)
+	wg := &sync.WaitGroup{}
 	for _, e := range li.list {
+		wg.Add(1)
 		waitCh <- struct{}{}
 		go func(e T) {
 			handler(e)
 			<-waitCh
+			wg.Done()
 		}(e)
 	}
+	wg.Wait()
 }
 
 func (li *List[T]) Unicast(key int, handler func(T)) error {
