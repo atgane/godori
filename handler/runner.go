@@ -8,10 +8,12 @@ import (
 )
 
 type Runner[T any] struct {
+	// initialize when construct
 	runnerEventloop event.Eventloop[*RunnerEvent[T]]
 	runnerHandler   RunnerHandler[T]
 	config          *RunnerConfig
 
+	// handler default value
 	closeCh chan struct{}
 	closed  atomic.Bool
 }
@@ -44,8 +46,10 @@ type RunnerHandler[T any] interface {
 
 func NewRunner[T any](h RunnerHandler[T], c *RunnerConfig) *Runner[T] {
 	r := &Runner[T]{}
-	r.config = c
+	r.runnerEventloop = event.NewEventLoop(h.OnCall, c.EventChannelSize, c.EventWorkerCount, c.SendTimeout)
 	r.runnerHandler = h
+	r.config = c
+
 	r.closeCh = make(chan struct{})
 	r.closed.Store(false)
 

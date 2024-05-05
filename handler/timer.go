@@ -6,12 +6,16 @@ import (
 )
 
 type Timer struct {
+	// initialize when construct
 	config       *TimerConfig
 	timerHandler TimerHandler
-	ticker       *time.Ticker
 
+	// handler default value
 	closeCh chan struct{}
 	closed  atomic.Bool
+
+	// initialize when run
+	ticker *time.Ticker
 }
 
 type TimerConfig struct {
@@ -33,7 +37,10 @@ type TimerHandler interface {
 
 func NewTimer[T any](h TimerHandler, c *TimerConfig) *Timer {
 	t := &Timer{}
+
 	t.config = c
+	t.timerHandler = h
+
 	t.closeCh = make(chan struct{})
 	t.closed.Store(false)
 
