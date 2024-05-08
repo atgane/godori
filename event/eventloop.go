@@ -37,16 +37,11 @@ func (e *eventloop[T]) Send(event T) error {
 		return errors.New("eventloop already closed")
 	}
 
-	if e.sendTimeout == 0 {
-		e.ch <- event
-		return nil
-	}
-
 	select {
 	case e.ch <- event:
 		return nil
-	case <-time.After(e.sendTimeout):
-		return errors.New("eventloop push timeout")
+	default:
+		return errors.New("eventloop send block")
 	}
 }
 
