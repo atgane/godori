@@ -60,6 +60,8 @@ func NewRunner[T any](handler RunnerHandler[T], config *RunnerConfig) *Runner[T]
 }
 
 func (r *Runner[T]) Run() (err error) {
+	defer r.Close()
+
 	go r.runnerEventloop.Run()
 	<-r.closeCh
 	return nil

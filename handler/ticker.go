@@ -48,6 +48,8 @@ func NewTicker[T any](handler TickerrHandler, config *TickerConfig) *Ticker {
 }
 
 func (t *Ticker) Run() (err error) {
+	defer t.Close()
+
 	t.ticker = time.NewTicker(t.config.Duration)
 
 	go func() {

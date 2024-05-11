@@ -100,6 +100,8 @@ func NewTcpServer[T any](handler SocketHandler[T], config *TcpServerConfig) *Tcp
 }
 
 func (s *TcpServer[T]) Run() (err error) {
+	defer s.Close()
+
 	s.listener, err = net.Listen("tcp", fmt.Sprintf(":%d", s.config.Port))
 	if err != nil {
 		return err
