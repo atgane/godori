@@ -42,11 +42,11 @@ type RunnerHandler[T any] interface {
 	OnCall(e *RunnerEvent[T])
 }
 
-func NewRunner[T any](h RunnerHandler[T], c *RunnerConfig) *Runner[T] {
+func NewRunner[T any](handler RunnerHandler[T], config *RunnerConfig) *Runner[T] {
 	r := &Runner[T]{}
-	r.runnerEventloop = event.NewEventLoop(h.OnCall, c.EventChannelSize, c.EventWorkerCount)
-	r.runnerHandler = h
-	r.config = c
+	r.runnerEventloop = event.NewEventLoop(handler.OnCall, config.EventChannelSize, config.EventWorkerCount)
+	r.runnerHandler = handler
+	r.config = config
 
 	r.closeCh = make(chan struct{})
 	r.closed.Store(false)
@@ -55,7 +55,7 @@ func NewRunner[T any](h RunnerHandler[T], c *RunnerConfig) *Runner[T] {
 		RunWithRecover(func() { r.runnerHandler.OnCall(e) })
 	}
 
-	r.runnerEventloop = event.NewEventLoop(eventHandler, c.EventChannelSize, c.EventWorkerCount)
+	r.runnerEventloop = event.NewEventLoop(eventHandler, config.EventChannelSize, config.EventWorkerCount)
 	return r
 }
 

@@ -85,13 +85,13 @@ const (
 	SocketDisconnected
 )
 
-func NewTcpServer[T any](h SocketHandler[T], c *TcpServerConfig) *TcpServer[T] {
+func NewTcpServer[T any](handler SocketHandler[T], config *TcpServerConfig) *TcpServer[T] {
 	s := &TcpServer[T]{}
-	s.Table = event.NewTable[string, *Conn[T]](c.TableInitSize)
+	s.Table = event.NewTable[string, *Conn[T]](config.TableInitSize)
 
-	s.config = c
-	s.socketEventloop = event.NewEventLoop(s.handleSocket, c.EventChannelSize, c.EventWorkerCount)
-	s.socketHandler = h
+	s.config = config
+	s.socketEventloop = event.NewEventLoop(s.handleSocket, config.EventChannelSize, config.EventWorkerCount)
+	s.socketHandler = handler
 
 	s.closeCh = make(chan struct{})
 	s.closed.Store(false)

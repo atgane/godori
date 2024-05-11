@@ -35,11 +35,11 @@ type TickerrHandler interface {
 	OnCall(e *TickerEvent)
 }
 
-func NewTicker[T any](h TickerrHandler, c *TickerConfig) *Ticker {
+func NewTicker[T any](handler TickerrHandler, config *TickerConfig) *Ticker {
 	t := &Ticker{}
 
-	t.config = c
-	t.tickerHandler = h
+	t.config = config
+	t.tickerHandler = handler
 
 	t.closeCh = make(chan struct{})
 	t.closed.Store(false)
