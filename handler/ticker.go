@@ -5,10 +5,10 @@ import (
 	"time"
 )
 
-type Timer struct {
+type Ticker struct {
 	// initialize when construct
-	config       *TimerConfig
-	timerHandler TimerHandler
+	config        *TickerConfig
+	tickerHandler TickerrHandler
 
 	// handler default value
 	closeCh chan struct{}
@@ -18,28 +18,28 @@ type Timer struct {
 	ticker *time.Ticker
 }
 
-type TimerConfig struct {
+type TickerConfig struct {
 	Duration time.Duration
 }
 
-func NewTimerConfig() *TimerConfig {
-	c := &TimerConfig{}
+func NewTickerConfig() *TickerConfig {
+	c := &TickerConfig{}
 	return c
 }
 
-type TimerEvent struct {
+type TickerEvent struct {
 	CreateAt time.Time
 }
 
-type TimerHandler interface {
-	OnCall(e *TimerEvent)
+type TickerrHandler interface {
+	OnCall(e *TickerEvent)
 }
 
-func NewTimer[T any](h TimerHandler, c *TimerConfig) *Timer {
-	t := &Timer{}
+func NewTicker[T any](h TickerrHandler, c *TickerConfig) *Ticker {
+	t := &Ticker{}
 
 	t.config = c
-	t.timerHandler = h
+	t.tickerHandler = h
 
 	t.closeCh = make(chan struct{})
 	t.closed.Store(false)
@@ -47,14 +47,14 @@ func NewTimer[T any](h TimerHandler, c *TimerConfig) *Timer {
 	return t
 }
 
-func (t *Timer) Run() (err error) {
+func (t *Ticker) Run() (err error) {
 	t.ticker = time.NewTicker(t.config.Duration)
 
 	go func() {
 		for {
 			select {
 			case <-t.ticker.C:
-				t.timerHandler.OnCall(&TimerEvent{
+				t.tickerHandler.OnCall(&TickerEvent{
 					CreateAt: time.Now(),
 				})
 			case <-t.closeCh:
@@ -66,7 +66,7 @@ func (t *Timer) Run() (err error) {
 	return nil
 }
 
-func (t *Timer) Close() {
+func (t *Ticker) Close() {
 	if t.closed.Load() {
 		return
 	}
