@@ -2,7 +2,6 @@ package event
 
 import (
 	"errors"
-	"time"
 )
 
 type Eventloop[T any] interface {
@@ -13,21 +12,19 @@ type Eventloop[T any] interface {
 }
 
 type eventloop[T any] struct {
-	ch          chan T
-	closed      bool
-	closeCh     chan struct{}
-	handler     func(T)
-	sendTimeout time.Duration
-	wc          int
+	ch      chan T
+	closed  bool
+	closeCh chan struct{}
+	handler func(T)
+	wc      int
 }
 
-func NewEventLoop[T any](handler func(T), channelSize int, workerCount int, sendTimeout time.Duration) Eventloop[T] {
+func NewEventLoop[T any](handler func(T), channelSize int, workerCount int) Eventloop[T] {
 	e := new(eventloop[T])
 	e.ch = make(chan T, channelSize)
 	e.closeCh = make(chan struct{})
 	e.closed = false
 	e.handler = handler
-	e.sendTimeout = sendTimeout
 	e.wc = workerCount
 	return e
 }

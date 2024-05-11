@@ -23,14 +23,12 @@ var _ Handler = (*Runner[*struct{}])(nil)
 type RunnerConfig struct {
 	EventChannelSize int
 	EventWorkerCount int
-	SendTimeout      time.Duration
 }
 
 func NewRunnerConfig() *RunnerConfig {
 	c := &RunnerConfig{
 		EventChannelSize: 4096,
 		EventWorkerCount: 1,
-		SendTimeout:      500 * time.Millisecond,
 	}
 	return c
 }
@@ -46,7 +44,7 @@ type RunnerHandler[T any] interface {
 
 func NewRunner[T any](h RunnerHandler[T], c *RunnerConfig) *Runner[T] {
 	r := &Runner[T]{}
-	r.runnerEventloop = event.NewEventLoop(h.OnCall, c.EventChannelSize, c.EventWorkerCount, c.SendTimeout)
+	r.runnerEventloop = event.NewEventLoop(h.OnCall, c.EventChannelSize, c.EventWorkerCount)
 	r.runnerHandler = h
 	r.config = c
 
@@ -57,7 +55,7 @@ func NewRunner[T any](h RunnerHandler[T], c *RunnerConfig) *Runner[T] {
 		RunWithRecover(func() { r.runnerHandler.OnCall(e) })
 	}
 
-	r.runnerEventloop = event.NewEventLoop(eventHandler, c.EventChannelSize, c.EventWorkerCount, c.SendTimeout)
+	r.runnerEventloop = event.NewEventLoop(eventHandler, c.EventChannelSize, c.EventWorkerCount)
 	return r
 }
 

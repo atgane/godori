@@ -38,7 +38,6 @@ type TcpServerConfig struct {
 	SocketWriteChannelSize int
 	ReadDeadlineSecond     int
 	WriteRetryCount        int
-	WriteEventloopTimeout  time.Duration
 }
 
 func NewTcpServerConfig() *TcpServerConfig {
@@ -50,7 +49,6 @@ func NewTcpServerConfig() *TcpServerConfig {
 		SocketWriteChannelSize: 16,
 		ReadDeadlineSecond:     30,
 		WriteRetryCount:        5,
-		WriteEventloopTimeout:  500 * time.Millisecond,
 	}
 	return c
 }
@@ -92,7 +90,7 @@ func NewTcpServer[T any](h SocketHandler[T], c *TcpServerConfig) *TcpServer[T] {
 	s.Table = event.NewTable[string, *Conn[T]](c.TableInitSize)
 
 	s.config = c
-	s.socketEventloop = event.NewEventLoop(s.handleSocket, c.EventChannelSize, c.EventWorkerCount, 0)
+	s.socketEventloop = event.NewEventLoop(s.handleSocket, c.EventChannelSize, c.EventWorkerCount)
 	s.socketHandler = h
 
 	s.closeCh = make(chan struct{})
@@ -151,7 +149,7 @@ func (s *TcpServer[T]) loopAccept() error {
 		conn:            conn,
 		writeRetryCount: s.config.WriteRetryCount,
 	}
-	c.writeEventloop = event.NewEventLoop(c.onWrite, s.config.SocketWriteChannelSize, 1, s.config.WriteEventloopTimeout)
+	c.writeEventloop = event.NewEventLoop(c.onWrite, s.config.SocketWriteChannelSize, 1)
 	c.onWriteErrorHandler = func(err error) {
 		s.socketHandler.OnWriteError(socketUuid, c, err)
 	}
