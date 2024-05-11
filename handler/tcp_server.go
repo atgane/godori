@@ -190,6 +190,11 @@ func (s *TcpServer[T]) onListen(e *SocketEvent[T]) {
 		e.conn.SetReadDeadline(time.Now().Add(time.Second * time.Duration(s.config.ReadDeadlineSecond)))
 		r, err := e.conn.Read(b)
 		if err != nil {
+
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				e.conn.Close()
+			}
+
 			RunWithRecover(func() { s.socketHandler.OnReadError(e.socketUuid, e.Conn, err) })
 
 			if s.closed.Load() {
