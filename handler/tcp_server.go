@@ -55,14 +55,14 @@ func NewTcpServerConfig() *TcpServerConfig {
 
 type SocketEvent[T any] struct {
 	*Conn[T]
-	socketUuid string
-	status     SocketStatus
+	status SocketStatus
 }
 
 type Conn[T any] struct {
-	CreateAt time.Time
-	UpdateAt time.Time
-	Field    T
+	SocketUuid string
+	CreateAt   time.Time
+	UpdateAt   time.Time
+	Field      T
 
 	writeEventloop      event.Eventloop[[]byte]
 	conn                net.Conn
@@ -71,11 +71,11 @@ type Conn[T any] struct {
 }
 
 type SocketHandler[T any] interface {
-	OnOpen(socketUuid string, e *Conn[T])
-	OnRead(socketUuid string, e *Conn[T], b []byte) uint
-	OnClose(socketUuid string, e *Conn[T])
-	OnReadError(socketUuid string, e *Conn[T], err error)  // while error caused at socket read
-	OnWriteError(socketUuid string, e *Conn[T], err error) // while error caused at socket write
+	OnOpen(e *Conn[T])
+	OnRead(e *Conn[T], b []byte) uint
+	OnClose(e *Conn[T])
+	OnReadError(e *Conn[T], err error)  // while error caused at socket read
+	OnWriteError(e *Conn[T], err error) // while error caused at socket write
 }
 
 type SocketStatus int
@@ -145,21 +145,21 @@ func (s *TcpServer[T]) loopAccept() error {
 	// socket write channel must satisfy single event loop
 	socketUuid := uuid.New().String()
 	c := &Conn[T]{
-		CreateAt: time.Now(),
-		UpdateAt: time.Now(),
+		SocketUuid: socketUuid,
+		CreateAt:   time.Now(),
+		UpdateAt:   time.Now(),
 
 		conn:            conn,
 		writeRetryCount: s.config.WriteRetryCount,
 	}
 	c.writeEventloop = event.NewEventLoop(c.onWrite, s.config.SocketWriteChannelSize, 1)
 	c.onWriteErrorHandler = func(err error) {
-		s.socketHandler.OnWriteError(socketUuid, c, err)
+		s.socketHandler.OnWriteError(c, err)
 	}
 
 	e := &SocketEvent[T]{
-		Conn:       c,
-		socketUuid: socketUuid,
-		status:     SocketConnected,
+		Conn:   c,
+		status: SocketConnected,
 	}
 
 	if err := s.socketEventloop.Send(e); err != nil {
@@ -172,14 +172,14 @@ func (s *TcpServer[T]) loopAccept() error {
 func (s *TcpServer[T]) handleSocket(e *SocketEvent[T]) {
 	switch e.status {
 	case SocketConnected:
-		s.Table.Upsert(e.socketUuid, e.Conn)
-		RunWithRecover(func() { s.socketHandler.OnOpen(e.socketUuid, e.Conn) })
+		s.Table.Upsert(e.SocketUuid, e.Conn)
+		RunWithRecover(func() { s.socketHandler.OnOpen(e.Conn) })
 		go s.onListen(e)
 		go e.Conn.run()
 	case SocketDisconnected:
-		RunWithRecover(func() { s.socketHandler.OnClose(e.socketUuid, e.Conn) })
+		RunWithRecover(func() { s.socketHandler.OnClose(e.Conn) })
 		e.Conn.close()
-		s.Table.Delete(e.socketUuid)
+		s.Table.Delete(e.SocketUuid)
 	}
 }
 
@@ -195,16 +195,15 @@ func (s *TcpServer[T]) onListen(e *SocketEvent[T]) {
 				e.conn.Close()
 			}
 
-			RunWithRecover(func() { s.socketHandler.OnReadError(e.socketUuid, e.Conn, err) })
+			RunWithRecover(func() { s.socketHandler.OnReadError(e.Conn, err) })
 
 			if s.closed.Load() {
 				return
 			}
 
 			s.socketEventloop.Send(&SocketEvent[T]{
-				Conn:       e.Conn,
-				socketUuid: e.socketUuid,
-				status:     SocketDisconnected,
+				Conn:   e.Conn,
+				status: SocketDisconnected,
 			})
 			return
 		}
@@ -215,7 +214,7 @@ func (s *TcpServer[T]) onListen(e *SocketEvent[T]) {
 		n := uint(len(buf))
 		for p < n {
 			var r uint
-			RunWithRecover(func() { r = s.socketHandler.OnRead(e.socketUuid, e.Conn, buf[p:]) })
+			RunWithRecover(func() { r = s.socketHandler.OnRead(e.Conn, buf[p:]) })
 			if r == 0 {
 				break
 			}
