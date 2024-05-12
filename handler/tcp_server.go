@@ -71,11 +71,17 @@ type Conn[T any] struct {
 }
 
 type SocketHandler[T any] interface {
+	// call when socket open
 	OnOpen(e *Conn[T])
+	// read byte slice from socket
+	// return value is length of recv data from socket read by application
 	OnRead(e *Conn[T], b []byte) uint
+	// call when socket close
 	OnClose(e *Conn[T])
-	OnReadError(e *Conn[T], err error)  // while error caused at socket read
-	OnWriteError(e *Conn[T], err error) // while error caused at socket write
+	// while error caused at socket read
+	OnReadError(e *Conn[T], err error)
+	// while error caused at socket write
+	OnWriteError(e *Conn[T], err error)
 }
 
 type SocketStatus int

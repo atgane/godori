@@ -75,3 +75,10 @@ func (t *Table[F, T]) Delete(key F) {
 
 	delete(t.table, key)
 }
+
+func (t *Table[F, T]) Len() int {
+	t.mu.RLock()
+	defer t.mu.Unlock()
+
+	return len(t.table)
+}
