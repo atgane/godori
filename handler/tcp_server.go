@@ -3,7 +3,6 @@ package handler
 import (
 	"fmt"
 	"net"
-	"runtime"
 	"sync/atomic"
 	"time"
 
@@ -234,29 +233,17 @@ func (c *Conn[T]) Write(w []byte) error { return c.writeEventloop.Send(w) }
 
 func (c *Conn[T]) onWrite(w []byte) {
 	m := uint(len(w))
-	retry := 0
 	n := uint(0)
 	for n < m {
 		d, err := c.conn.Write(w[n:])
 		n += uint(d)
 		if err != nil {
-			if opErr, ok := err.(*net.OpError); ok && opErr.Temporary() {
-				runtime.Gosched()
-				retry++
-				if retry >= c.writeRetryCount {
-					RunWithRecover(func() { c.onWriteErrorHandler(err) })
-					return
-				}
-				continue
-			}
 			RunWithRecover(func() { c.onWriteErrorHandler(err) })
 			return
 		}
 		if d == 0 { // prevent inf loop
 			break
 		}
-
-		retry = 0
 	}
 }
 
