@@ -13,32 +13,37 @@ import (
 type TcpServer[T any] struct {
 	*event.Table[string, *Conn[T]]
 
-	// initialize when construct
-	config          *TcpServerConfig
+	// Configuration for the TCP server
+	config *TcpServerConfig
+	// Event loop for handling socket events
 	socketEventloop event.Eventloop[*SocketEvent[T]]
-	socketHandler   SocketHandler[T]
+	// Handler for socket events
+	socketHandler SocketHandler[T]
 
-	// handler default value
+	// Channel to signal server closure
 	closeCh chan struct{}
-	closed  atomic.Bool
+	// Atomic boolean to check if server is closed
+	closed atomic.Bool
 
-	// initialize when run
+	// Listener for accepting new connections
 	listener net.Listener
 }
 
+// Ensures TcpServer implements the Handler interface
 var _ Handler = (*TcpServer[*struct{}])(nil)
 
 type TcpServerConfig struct {
-	EventChannelSize       int
-	EventWorkerCount       int
-	Port                   int
-	TableInitSize          int
-	SocketBufferSize       int
-	SocketWriteChannelSize int
-	ReadDeadlineSecond     int
-	WriteRetryCount        int
+	EventChannelSize       int // Size of the event channel
+	EventWorkerCount       int // Number of workers for event handling
+	Port                   int // Port to listen on
+	TableInitSize          int // Initial size of the connection table
+	SocketBufferSize       int // Buffer size for socket reads
+	SocketWriteChannelSize int // Size of the socket write channel
+	ReadDeadlineSecond     int // Read deadline in seconds
+	WriteRetryCount        int // Number of retries for writing to socket
 }
 
+// Creates a new configuration with default values
 func NewTcpServerConfig() *TcpServerConfig {
 	c := &TcpServerConfig{
 		EventChannelSize:       4096,
@@ -54,35 +59,37 @@ func NewTcpServerConfig() *TcpServerConfig {
 
 type SocketEvent[T any] struct {
 	*Conn[T]
-	status SocketStatus
+	status SocketStatus // Status of the socket (connected/disconnected)
 }
 
 type Conn[T any] struct {
-	SocketUuid string
-	CreateAt   time.Time
-	UpdateAt   time.Time
-	Field      T
+	SocketUuid string    // Unique identifier for the socket
+	CreateAt   time.Time // Timestamp of connection creation
+	UpdateAt   time.Time // Timestamp of last update
+	Field      T         // Generic field for custom data
 
-	writeEventloop      event.Eventloop[[]byte]
-	conn                net.Conn
-	onWriteErrorHandler func(err error)
-	writeRetryCount     int
+	writeEventloop      event.Eventloop[[]byte] // Event loop for writing data
+	conn                net.Conn                // Network connection
+	onWriteErrorHandler func(err error)         // Error handler for write errors
+	writeRetryCount     int                     // Number of write retries
 }
 
+// Interface for handling socket events
 type SocketHandler[T any] interface {
-	// call when socket open
+	// Called when socket opens
 	OnOpen(e *Conn[T])
-	// read byte slice from socket
-	// return value is length of recv data from socket read by application
+	// Called when data is read from socket
+	// Returns the length of received data
 	OnRead(e *Conn[T], b []byte) uint
-	// call when socket close
+	// Called when socket closes
 	OnClose(e *Conn[T])
-	// while error caused at socket read
+	// Called when an error occurs while reading
 	OnReadError(e *Conn[T], err error)
-	// while error caused at socket write
+	// Called when an error occurs while writing
 	OnWriteError(e *Conn[T], err error)
 }
 
+// Enumeration for socket status
 type SocketStatus int
 
 const (
@@ -90,6 +97,7 @@ const (
 	SocketDisconnected
 )
 
+// Creates a new TcpServer instance
 func NewTcpServer[T any](handler SocketHandler[T], config *TcpServerConfig) *TcpServer[T] {
 	s := &TcpServer[T]{}
 	s.Table = event.NewTable[string, *Conn[T]](config.TableInitSize)
@@ -104,6 +112,7 @@ func NewTcpServer[T any](handler SocketHandler[T], config *TcpServerConfig) *Tcp
 	return s
 }
 
+// Starts the TCP server and begins accepting connections
 func (s *TcpServer[T]) Run() (err error) {
 	defer s.Close()
 
@@ -116,7 +125,7 @@ func (s *TcpServer[T]) Run() (err error) {
 	go func() {
 		for {
 			if err := s.loopAccept(); err != nil {
-				return // tcp server close
+				return // TCP server closed
 			}
 		}
 	}()
@@ -125,6 +134,7 @@ func (s *TcpServer[T]) Run() (err error) {
 	return nil
 }
 
+// Closes the TCP server and all connections
 func (s *TcpServer[T]) Close() {
 	if s.closed.Load() {
 		return
@@ -136,18 +146,19 @@ func (s *TcpServer[T]) Close() {
 	s.listener.Close()
 }
 
+// Checks if the server is closed
 func (s *TcpServer[T]) IsClosed() bool {
 	return s.closed.Load()
 }
 
+// Accepts new connections in a loop
 func (s *TcpServer[T]) loopAccept() error {
 	conn, err := s.listener.Accept()
 	if err != nil {
 		return err
 	}
 
-	// socket write loop initializing
-	// socket write channel must satisfy single event loop
+	// Initialize socket write loop
 	socketUuid := uuid.New().String()
 	c := &Conn[T]{
 		SocketUuid: socketUuid,
@@ -174,6 +185,7 @@ func (s *TcpServer[T]) loopAccept() error {
 	return nil
 }
 
+// Handles socket events
 func (s *TcpServer[T]) handleSocket(e *SocketEvent[T]) {
 	switch e.status {
 	case SocketConnected:
@@ -188,6 +200,7 @@ func (s *TcpServer[T]) handleSocket(e *SocketEvent[T]) {
 	}
 }
 
+// Listens for data on a connected socket
 func (s *TcpServer[T]) onListen(e *SocketEvent[T]) {
 	b := make([]byte, s.config.SocketBufferSize)
 	buf := make([]byte, 0, s.config.SocketBufferSize*2)
@@ -195,7 +208,7 @@ func (s *TcpServer[T]) onListen(e *SocketEvent[T]) {
 		e.conn.SetReadDeadline(time.Now().Add(time.Second * time.Duration(s.config.ReadDeadlineSecond)))
 		r, err := e.conn.Read(b)
 		if err != nil {
-
+			// Handle read errors, including timeouts
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 				e.conn.Close()
 			}
@@ -229,8 +242,10 @@ func (s *TcpServer[T]) onListen(e *SocketEvent[T]) {
 	}
 }
 
+// Sends data to be written to the connection
 func (c *Conn[T]) Write(w []byte) error { return c.writeEventloop.Send(w) }
 
+// Writes data to the connection
 func (c *Conn[T]) onWrite(w []byte) {
 	m := uint(len(w))
 	n := uint(0)
@@ -241,11 +256,14 @@ func (c *Conn[T]) onWrite(w []byte) {
 			RunWithRecover(func() { c.onWriteErrorHandler(err) })
 			return
 		}
-		if d == 0 { // prevent inf loop
+		if d == 0 { // Prevent infinite loop
 			break
 		}
 	}
 }
 
-func (c *Conn[T]) run()   { c.writeEventloop.Run() }
+// Runs the write event loop
+func (c *Conn[T]) run() { c.writeEventloop.Run() }
+
+// Closes the connection and its write event loop
 func (c *Conn[T]) close() { c.writeEventloop.Close() }
