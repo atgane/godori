@@ -266,4 +266,7 @@ func (c *Conn[T]) onWrite(w []byte) {
 func (c *Conn[T]) run() { c.writeEventloop.Run() }
 
 // Closes the connection and its write event loop
-func (c *Conn[T]) close() { c.writeEventloop.Close() }
+func (c *Conn[T]) close() {
+	c.writeEventloop.Close()
+	c.conn.Close()
+}
