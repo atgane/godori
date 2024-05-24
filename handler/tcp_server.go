@@ -40,7 +40,6 @@ type TcpServerConfig struct {
 	SocketBufferSize       int // Buffer size for socket reads
 	SocketWriteChannelSize int // Size of the socket write channel
 	ReadDeadlineSecond     int // Read deadline in seconds
-	WriteRetryCount        int // Number of retries for writing to socket
 }
 
 // Creates a new configuration with default values
@@ -52,7 +51,6 @@ func NewTcpServerConfig() *TcpServerConfig {
 		SocketBufferSize:       4096,
 		SocketWriteChannelSize: 16,
 		ReadDeadlineSecond:     30,
-		WriteRetryCount:        5,
 	}
 	return c
 }
@@ -60,18 +58,6 @@ func NewTcpServerConfig() *TcpServerConfig {
 type SocketEvent[T any] struct {
 	*Conn[T]
 	status SocketStatus // Status of the socket (connected/disconnected)
-}
-
-type Conn[T any] struct {
-	SocketUuid string    // Unique identifier for the socket
-	CreateAt   time.Time // Timestamp of connection creation
-	UpdateAt   time.Time // Timestamp of last update
-	Field      T         // Generic field for custom data
-
-	writeEventloop      event.Eventloop[[]byte] // Event loop for writing data
-	conn                net.Conn                // Network connection
-	onWriteErrorHandler func(err error)         // Error handler for write errors
-	writeRetryCount     int                     // Number of write retries
 }
 
 // Interface for handling socket events
@@ -165,8 +151,7 @@ func (s *TcpServer[T]) loopAccept() error {
 		CreateAt:   time.Now(),
 		UpdateAt:   time.Now(),
 
-		conn:            conn,
-		writeRetryCount: s.config.WriteRetryCount,
+		conn: conn,
 	}
 	c.writeEventloop = event.NewEventLoop(c.onWrite, s.config.SocketWriteChannelSize, 1)
 	c.onWriteErrorHandler = func(err error) {
@@ -240,33 +225,4 @@ func (s *TcpServer[T]) onListen(e *SocketEvent[T]) {
 		}
 		buf = buf[p:]
 	}
-}
-
-// Sends data to be written to the connection
-func (c *Conn[T]) Write(w []byte) error { return c.writeEventloop.Send(w) }
-
-// Writes data to the connection
-func (c *Conn[T]) onWrite(w []byte) {
-	m := uint(len(w))
-	n := uint(0)
-	for n < m {
-		d, err := c.conn.Write(w[n:])
-		n += uint(d)
-		if err != nil {
-			RunWithRecover(func() { c.onWriteErrorHandler(err) })
-			return
-		}
-		if d == 0 { // Prevent infinite loop
-			break
-		}
-	}
-}
-
-// Runs the write event loop
-func (c *Conn[T]) run() { c.writeEventloop.Run() }
-
-// Closes the connection and its write event loop
-func (c *Conn[T]) close() {
-	c.writeEventloop.Close()
-	c.conn.Close()
 }
