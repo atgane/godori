@@ -75,13 +75,6 @@ func (c *Conn[T]) Write(w []byte) error {
 
 // Writes data to the connection
 func (c *Conn[T]) onWrite(w []byte) {
-	// if normal shutdown, just close function
-	if c.closed.Load() {
-		return
-	}
-
-	defer c.close()
-
 	m := uint(len(w))
 	n := uint(0)
 	for n < m {
@@ -89,6 +82,11 @@ func (c *Conn[T]) onWrite(w []byte) {
 		d, err := c.conn.Write(w[n:])
 		n += uint(d)
 		if err != nil {
+			// if normal shutdown, just close function
+			if c.closed.Load() {
+				return
+			}
+
 			RunWithRecover(func() { c.socketHandler.OnWriteError(c, err) })
 			return
 		}
