@@ -13,8 +13,6 @@ type TcpServer[T any] struct {
 
 	// Configuration for the TCP server
 	config *TcpServerConfig
-	// Event loop for handling socket events
-	socketEventloop event.Eventloop[*Conn[T]]
 	// Handler for socket events
 	socketHandler SocketHandler[T]
 
@@ -31,8 +29,6 @@ type TcpServer[T any] struct {
 var _ Handler = (*TcpServer[*struct{}])(nil)
 
 type TcpServerConfig struct {
-	EventChannelSize       int // Size of the event channel
-	EventWorkerCount       int // Number of workers for event handling
 	Port                   int // Port to listen on
 	TableInitSize          int // Initial size of the connection table
 	SocketBufferSize       int // Buffer size for socket reads
@@ -44,8 +40,6 @@ type TcpServerConfig struct {
 // Creates a new configuration with default values
 func NewTcpServerConfig() *TcpServerConfig {
 	c := &TcpServerConfig{
-		EventChannelSize:       4096,
-		EventWorkerCount:       1,
 		TableInitSize:          2048,
 		SocketBufferSize:       4096,
 		SocketWriteChannelSize: 16,
@@ -76,7 +70,6 @@ func NewTcpServer[T any](handler SocketHandler[T], config *TcpServerConfig) *Tcp
 	s.Table = event.NewTable[string, *Conn[T]](config.TableInitSize)
 
 	s.config = config
-	s.socketEventloop = event.NewEventLoop(s.handleSocket, config.EventChannelSize, config.EventWorkerCount)
 	s.socketHandler = handler
 
 	s.closeCh = make(chan struct{})
@@ -93,7 +86,6 @@ func (s *TcpServer[T]) Run() (err error) {
 	if err != nil {
 		return err
 	}
-	go s.socketEventloop.Run()
 
 	go func() {
 		for {
@@ -115,7 +107,6 @@ func (s *TcpServer[T]) Close() {
 
 	s.closed.Store(true)
 	close(s.closeCh)
-	s.socketEventloop.Close()
 	s.listener.Close()
 }
 
@@ -133,20 +124,13 @@ func (s *TcpServer[T]) loopAccept() error {
 
 	c := NewConn[T](conn, s.config.ConnConfig, s.socketHandler)
 
-	if err := s.socketEventloop.Send(c); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// Handles socket events
-func (s *TcpServer[T]) handleSocket(c *Conn[T]) {
-	s.Table.Upsert(c.SocketUuid, c)
-	RunWithRecover(func() { s.socketHandler.OnOpen(c) })
 	go func() {
+		s.Table.Upsert(c.SocketUuid, c)
+		RunWithRecover(func() { s.socketHandler.OnOpen(c) })
 		c.run()
 		RunWithRecover(func() { s.socketHandler.OnClose(c) })
 		s.Table.Delete(c.SocketUuid)
 	}()
+
+	return nil
 }
