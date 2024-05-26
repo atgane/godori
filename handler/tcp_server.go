@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"sync/atomic"
-	"time"
 
 	"github.com/atgane/godori/event"
 )
@@ -15,7 +14,7 @@ type TcpServer[T any] struct {
 	// Configuration for the TCP server
 	config *TcpServerConfig
 	// Event loop for handling socket events
-	socketEventloop event.Eventloop[*SocketEvent[T]]
+	socketEventloop event.Eventloop[*Conn[T]]
 	// Handler for socket events
 	socketHandler SocketHandler[T]
 
@@ -56,11 +55,6 @@ func NewTcpServerConfig() *TcpServerConfig {
 	return c
 }
 
-type SocketEvent[T any] struct {
-	*Conn[T]
-	status SocketStatus // Status of the socket (connected/disconnected)
-}
-
 // Interface for handling socket events
 type SocketHandler[T any] interface {
 	// Called when socket opens
@@ -75,14 +69,6 @@ type SocketHandler[T any] interface {
 	// Called when an error occurs while writing
 	OnWriteError(e *Conn[T], err error)
 }
-
-// Enumeration for socket status
-type SocketStatus int
-
-const (
-	SocketConnected SocketStatus = iota
-	SocketDisconnected
-)
 
 // Creates a new TcpServer instance
 func NewTcpServer[T any](handler SocketHandler[T], config *TcpServerConfig) *TcpServer[T] {
@@ -147,12 +133,7 @@ func (s *TcpServer[T]) loopAccept() error {
 
 	c := NewConn[T](conn, s.config.ConnConfig, s.socketHandler)
 
-	e := &SocketEvent[T]{
-		Conn:   c,
-		status: SocketConnected,
-	}
-
-	if err := s.socketEventloop.Send(e); err != nil {
+	if err := s.socketEventloop.Send(c); err != nil {
 		return err
 	}
 
@@ -160,58 +141,12 @@ func (s *TcpServer[T]) loopAccept() error {
 }
 
 // Handles socket events
-func (s *TcpServer[T]) handleSocket(e *SocketEvent[T]) {
-	switch e.status {
-	case SocketConnected:
-		s.Table.Upsert(e.SocketUuid, e.Conn)
-		RunWithRecover(func() { s.socketHandler.OnOpen(e.Conn) })
-		go s.onListen(e)
-		go e.Conn.run()
-	case SocketDisconnected:
-		RunWithRecover(func() { s.socketHandler.OnClose(e.Conn) })
-		e.Conn.close()
-		s.Table.Delete(e.SocketUuid)
-	}
-}
-
-// Listens for data on a connected socket
-func (s *TcpServer[T]) onListen(e *SocketEvent[T]) {
-	b := make([]byte, s.config.SocketBufferSize)
-	buf := make([]byte, 0, s.config.SocketBufferSize*2)
-	for {
-		e.conn.SetReadDeadline(time.Now().Add(time.Second * time.Duration(s.config.ReadDeadlineSecond)))
-		r, err := e.conn.Read(b)
-		if err != nil {
-			// Handle read errors, including timeouts
-			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-				e.conn.Close()
-			}
-
-			RunWithRecover(func() { s.socketHandler.OnReadError(e.Conn, err) })
-
-			if s.closed.Load() {
-				return
-			}
-
-			s.socketEventloop.Send(&SocketEvent[T]{
-				Conn:   e.Conn,
-				status: SocketDisconnected,
-			})
-			return
-		}
-
-		e.UpdateAt = time.Now()
-		buf = append(buf, b[:r]...)
-		p := uint(0)
-		n := uint(len(buf))
-		for p < n {
-			var r uint
-			RunWithRecover(func() { r = s.socketHandler.OnRead(e.Conn, buf[p:]) })
-			if r == 0 {
-				break
-			}
-			p += r
-		}
-		buf = buf[p:]
-	}
+func (s *TcpServer[T]) handleSocket(c *Conn[T]) {
+	s.Table.Upsert(c.SocketUuid, c)
+	RunWithRecover(func() { s.socketHandler.OnOpen(c) })
+	go func() {
+		c.run()
+		RunWithRecover(func() { s.socketHandler.OnClose(c) })
+		s.Table.Delete(c.SocketUuid)
+	}()
 }

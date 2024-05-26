@@ -63,6 +63,7 @@ func NewConn[T any](conn net.Conn, config *ConnConfig, socketHandler SocketHandl
 func (c *Conn[T]) run() {
 	go c.writeEventloop.Run()
 	go c.onListen()
+	<-c.closeCh
 }
 
 // Sends data to be written to the connection
