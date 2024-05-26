@@ -61,6 +61,8 @@ func NewConn[T any](conn net.Conn, config *ConnConfig, socketHandler SocketHandl
 
 // Runs the write event loop
 func (c *Conn[T]) run() {
+	defer c.ForceClose()
+
 	go c.writeEventloop.Run()
 	go c.onListen()
 	<-c.closeCh
@@ -98,7 +100,7 @@ func (c *Conn[T]) onWrite(w []byte) {
 }
 
 func (c *Conn[T]) onListen() {
-	defer c.close()
+	defer c.ForceClose()
 
 	b := make([]byte, c.config.SocketReadBufferSize)
 	buf := make([]byte, 0, c.config.SocketReadBufferSize*2)
@@ -132,7 +134,7 @@ func (c *Conn[T]) onListen() {
 }
 
 // Closes the connection and its write event loop
-func (c *Conn[T]) close() {
+func (c *Conn[T]) ForceClose() {
 	if c.closed.Load() {
 		return
 	}
@@ -141,4 +143,13 @@ func (c *Conn[T]) close() {
 	close(c.closeCh)
 	c.writeEventloop.Close()
 	c.conn.Close()
+}
+
+func (c *Conn[T]) ReserveClose() {
+	if c.closed.Load() {
+		return
+	}
+
+	c.closed.Store(true)
+	close(c.closeCh)
 }
