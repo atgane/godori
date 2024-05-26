@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/atgane/godori/event"
-	"github.com/google/uuid"
 )
 
 type TcpServer[T any] struct {
@@ -40,6 +39,7 @@ type TcpServerConfig struct {
 	SocketBufferSize       int // Buffer size for socket reads
 	SocketWriteChannelSize int // Size of the socket write channel
 	ReadDeadlineSecond     int // Read deadline in seconds
+	ConnConfig             *ConnConfig
 }
 
 // Creates a new configuration with default values
@@ -51,6 +51,7 @@ func NewTcpServerConfig() *TcpServerConfig {
 		SocketBufferSize:       4096,
 		SocketWriteChannelSize: 16,
 		ReadDeadlineSecond:     30,
+		ConnConfig:             NewConnConfig(),
 	}
 	return c
 }
@@ -144,19 +145,7 @@ func (s *TcpServer[T]) loopAccept() error {
 		return err
 	}
 
-	// Initialize socket write loop
-	socketUuid := uuid.New().String()
-	c := &Conn[T]{
-		SocketUuid: socketUuid,
-		CreateAt:   time.Now(),
-		UpdateAt:   time.Now(),
-
-		conn: conn,
-	}
-	c.writeEventloop = event.NewEventLoop(c.onWrite, s.config.SocketWriteChannelSize, 1)
-	c.onWriteErrorHandler = func(err error) {
-		s.socketHandler.OnWriteError(c, err)
-	}
+	c := NewConn[T](conn, s.config.ConnConfig, s.socketHandler)
 
 	e := &SocketEvent[T]{
 		Conn:   c,
