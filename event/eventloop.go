@@ -2,6 +2,8 @@ package event
 
 import (
 	"errors"
+	"sync"
+	"sync/atomic"
 )
 
 // Eventloop is a generic interface defining methods for an event loop.
@@ -10,12 +12,13 @@ type Eventloop[T any] interface {
 	Run()               // Starts the event loop.
 	Close()             // Closes the event loop.
 	IsClosed() bool     // Checks if the event loop is closed.
+	Len() int           // Returns length of the eventloop channel.
 }
 
 // eventloop is a struct implementing the Eventloop interface.
 type eventloop[T any] struct {
 	ch      chan T        // Channel to send and receive events.
-	closed  bool          // Indicates if the event loop is closed.
+	closed  atomic.Bool   // Indicates if the event loop is closed.
 	closeCh chan struct{} // Channel to signal closing of the event loop.
 	handler func(T)       // Handler function to process events.
 	wc      int           // Worker count for concurrent processing.
@@ -26,7 +29,7 @@ func NewEventLoop[T any](handler func(T), channelSize int, workerCount int) Even
 	e := new(eventloop[T])
 	e.ch = make(chan T, channelSize)
 	e.closeCh = make(chan struct{})
-	e.closed = false
+	e.closed.Store(false)
 	e.handler = handler
 	e.wc = workerCount
 	return e
@@ -34,7 +37,7 @@ func NewEventLoop[T any](handler func(T), channelSize int, workerCount int) Even
 
 // Send sends an event to the event loop, returns an error if the loop is closed or blocked.
 func (e *eventloop[T]) Send(event T) error {
-	if e.closed {
+	if e.closed.Load() {
 		return errors.New("eventloop already closed")
 	}
 
@@ -48,12 +51,17 @@ func (e *eventloop[T]) Send(event T) error {
 
 // Run starts the event loop and its workers.
 func (e *eventloop[T]) Run() {
+	wg := &sync.WaitGroup{}
+
 	for range e.wc {
+		wg.Add(1)
 		go func() {
+			wg.Done()
 			for {
 				select {
-				case <-e.closeCh: // Prioritize close signal.
-					return
+				case event := <-e.ch: // Prioritize handle event.
+					e.handle(event)
+					continue
 				default:
 				}
 
@@ -61,28 +69,35 @@ func (e *eventloop[T]) Run() {
 				case event := <-e.ch: // Process event.
 					e.handle(event)
 				case <-e.closeCh: // Check for close signal again.
+					if len(e.ch) != 0 {
+						continue
+					}
 					return
 				}
 			}
 		}()
 	}
 
-	<-e.closeCh // Block until close signal is received.
+	wg.Wait() // Block until close signal is received.
 }
 
 // Close stops the event loop and marks it as closed.
 func (e *eventloop[T]) Close() {
-	if e.closed {
+	if e.closed.Load() {
 		return
 	}
 
 	close(e.closeCh)
-	e.closed = true
+	e.closed.Store(true)
 }
 
 // IsClosed checks if the event loop has been closed.
 func (e *eventloop[T]) IsClosed() bool {
-	return e.closed
+	return e.closed.Load()
+}
+
+func (e *eventloop[T]) Len() int {
+	return len(e.ch)
 }
 
 // handle processes an event using the provided handler function.
