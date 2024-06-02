@@ -101,3 +101,10 @@ func (li *List[T]) Delete(key int) error {
 
 	return nil
 }
+
+func (li *List[T]) Len() int {
+	li.mu.RLock()
+	defer li.mu.RUnlock()
+
+	return len(li.list)
+}
