@@ -39,6 +39,9 @@ func (t *Reserver) Start() {
 			select {
 			// Wait for the specified duration before executing the handler
 			case <-time.After(t.duration):
+				if !t.started.Load() {
+					return
+				}
 				t.handler()
 			// If a cancel signal is received, exit the goroutine
 			case <-t.cancelCh:
